@@ -7,6 +7,8 @@ use aleph_client::{
 use anyhow::{bail, Context, Result};
 use futures::StreamExt;
 
+use crate::notifications::NotificationSender;
+
 /// Events subsription logic
 #[derive(Debug)]
 pub struct Events {
@@ -20,8 +22,13 @@ impl Events {
         Ok(Self { term })
     }
 
-    /// Logs every reward event for a given on-chain address
-    pub async fn log_reward_events(&self, conn: Connection, _for_account: AccountId) -> Result<()> {
+    /// Sends notification about every transfer event for a given on-chain address
+    pub async fn send_transfer_event_notification(
+        &self,
+        conn: Connection,
+        _to_account: AccountId,
+        notifier: Arc<dyn NotificationSender>,
+    ) -> Result<()> {
         let mut block_sub = conn
             .as_client()
             .blocks()
@@ -45,6 +52,13 @@ impl Events {
                     log::info!("Received Rewarded event: {:?}", evt);
                 } else if let Ok(Some(evt)) = event.as_event::<Transfer>() {
                     log::info!("Received Transfer event: {:?}", evt);
+                    notifier
+                        .send_transfer_notification(crate::notifications::TransferNotification {
+                            from_account: evt.from.0,
+                            to_account: evt.to.0,
+                            amount: evt.amount,
+                        })
+                        .await?;
                 }
             }
         }

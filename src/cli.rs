@@ -26,9 +26,27 @@ pub struct Cli {
 #[derive(Clone, Eq, PartialEq, Debug, Subcommand)]
 pub enum Commands {
     /// Capture reward events for a given chain account
-    RewardEvent {
+    TransferEvent {
         /// On-chain address for capturing reward events
         #[arg(short = 'a', long)]
-        for_account: AccountId,
+        to_account: AccountId,
+
+        /// Commands defining the target of the notifications
+        #[clap(subcommand)]
+        targets: Targets,
+    },
+}
+
+/// Commands to define target channel for notifications
+#[derive(Debug, Clone, Eq, PartialEq, Subcommand)]
+pub enum Targets {
+    /// Notification are sent to the Telegram bot
+    Telegram {
+        /// Telegram bot token
+        #[arg(short = 't', long)]
+        token: String,
+        /// Telegram channel
+        #[arg(short = 'c', long)]
+        chat_id: i64,
     },
 }

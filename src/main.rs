@@ -1,5 +1,6 @@
 mod cli;
 mod events;
+mod notifications;
 
 use std::sync::{atomic::AtomicBool, Arc};
 
@@ -26,9 +27,18 @@ async fn main() -> Result<()> {
     let events = Events::new(Arc::clone(&term))?;
 
     match cli.commands {
-        cli::Commands::RewardEvent { for_account } => {
-            events.log_reward_events(conn, for_account).await?
-        }
+        cli::Commands::TransferEvent {
+            to_account,
+            targets,
+        } => match targets {
+            cli::Targets::Telegram { token, chat_id } => {
+                let telegram_bot =
+                    Arc::new(notifications::telegram::TelegramBot::new(token, chat_id)?);
+                events
+                    .send_transfer_event_notification(conn, to_account, telegram_bot)
+                    .await?
+            }
+        },
     }
 
     Ok(())
