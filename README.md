@@ -16,4 +16,6 @@ Aleph zero notification service
 
 ## Usage scenarios
 
-	$ cargo run --release -- -n wss://ws.test.azero.dev:443 reward-event -a 5GRkePp3CqPJXkfbt52G4XdZp4Pi4oQaHyERNrFX6fxB73HU
+Send notifications about transfer event to the Telegram channel
+
+	$ cargo run --release -- -n wss://ws.test.azero.dev:443 transfer-event -a 5GRkePp3CqPJXkfbt52G4XdZp4Pi4oQaHyERNrFX6fxB73HU telegram -t <bot token> -c <channel id>
