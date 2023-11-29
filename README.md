@@ -60,10 +60,8 @@ Each month, the smart contract owner sings a transaction to transfer an appropri
 ```mermaid
 flowchart LR
     subgraph aleph zero
-    A[On-chain account] --Add subscription --> SC[[Smart contract
-        * subscriptions
-        * recurrent payments]]
-    SC --Publish--> ADDSUB(New subscrption Event)
+    A[On-chain account] --Add subscription--> SC[[Smart contract]]
+    SC --Publish--> ADDSUB[New subscrption Event]
     CEVT[On-chain event]
     end
     subgraph external
@@ -84,7 +82,7 @@ A cancellation event is published on-chain. The notificatin service listens for 
 ```mermaid
 flowchart LR
     subgraph aleph zero
-    A[On-chain account] --Cancel subscription --> SC[[Smart contract]]
+    A[On-chain account] --Cancel subscription--> SC[[Smart contract]]
     SC --Publish--> CSUB(Cancel subscrption Event)
     CEVT[On-chain event]
     end
