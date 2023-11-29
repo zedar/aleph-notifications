@@ -60,22 +60,20 @@ Each month, the smart contract owner sings a transaction to transfer an appropri
 ```mermaid
 flowchart LR
     subgraph aleph zero
-        A[On-chain account] --Add subscription --> SC[[Smart contract
+    A[On-chain account] --Add subscription --> SC[[Smart contract
         * subscriptions
         * recurrent payments]]
-        SC --Publish--> ADDSUB(New subscrption Event)
-        CEVT[On-chain event]
+    SC --Publish--> ADDSUB(New subscrption Event)
+    CEVT[On-chain event]
     end
-    
     subgraph external
-    	T[Telegram]
+    T[Telegram]
     end
-    
     subgraph client
-    	NS[Notification Service] --Watch for--oADDSUB
-    	NS --Activate-->NS
-    	NS --Watch for--oCEVT
-    	NS --Send notification-->T
+    NS[Notification Service] --Watch for--oADDSUB
+    NS --Activate-->NS
+    NS --Watch for--oCEVT
+    NS --Send notification-->T
     end
 ```
 
