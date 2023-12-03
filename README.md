@@ -36,7 +36,20 @@ The application is built using the `--release` flag to minimize the size of the 
 Telegram requires bot to be configured for using Telegram REST API. In order to create a new bot use [@Botfather](https://t.me/botfather) the the format `123456789:aaaabbbbcccc`.
 
 Find the Telegram `chat_id` or `group_chat_id` where notifications will be sent. In a future version, this feature will be dynamically configured as a part of subscription procedure.
-
+Use [@RawDataBot](https://telegram.me/rawdatabot) to get your `chat_id`, e.g. `222222222` from the json message below (`message/chat/id`). 
+```json
+    "update_id": 111111111,
+    "message": {
+        "chat": {
+            "id": 222222222,
+            "first_name": "user.azero",
+            "username": "username",
+            "type": "private"
+        },
+    }
+}
+```
+Find the `aleph-notifications` Telegram bot and start the channel. This step is required by the bot to send messages to your `chat_id`.
 
 ## Usage scenarios
 

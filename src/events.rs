@@ -6,8 +6,9 @@ use aleph_client::{
 };
 use anyhow::{bail, Context, Result};
 use futures::StreamExt;
+use subxt::events::StaticEvent;
 
-use crate::notifications::NotificationSender;
+use crate::notifications::{NotificationMessage, NotificationSender};
 
 /// Events subsription logic
 #[derive(Debug)]
@@ -26,8 +27,64 @@ impl Events {
     pub async fn send_transfer_event_notification(
         &self,
         conn: Connection,
-        _to_account: AccountId,
-        notifier: Arc<dyn NotificationSender>,
+        stash_account: AccountId,
+        notifier: &impl NotificationSender,
+    ) -> Result<()> {
+        self.send_event_notification(
+            conn,
+            |evt: &Transfer| {
+                if evt.to.0 == stash_account {
+                    true
+                } else {
+                    false
+                }
+            },
+            |evt: &Transfer| crate::notifications::TransferNotification {
+                from_account: evt.from.0.clone(),
+                to_account: evt.to.0.clone(),
+                amount: evt.amount,
+            },
+            notifier,
+        )
+        .await
+    }
+
+    /// Sends notification about rewarded events associated with a given stash account
+    pub async fn send_rewarded_event_notification(
+        &self,
+        conn: Connection,
+        stash_account: AccountId,
+        notifier: &impl NotificationSender,
+    ) -> Result<()> {
+        self.send_event_notification(
+            conn,
+            |evt: &Rewarded| {
+                if evt.stash.0 == stash_account {
+                    true
+                } else {
+                    false
+                }
+            },
+            |evt: &Rewarded| crate::notifications::RewardedNotification {
+                stash_account: evt.stash.0.clone(),
+                amount: evt.amount,
+            },
+            notifier,
+        )
+        .await
+    }
+
+    async fn send_event_notification<
+        T: StaticEvent,
+        M: NotificationMessage,
+        P: Fn(&T) -> bool + Send,
+        C: Fn(&T) -> M,
+    >(
+        &self,
+        conn: Connection,
+        predicate: P,
+        converter: C,
+        notifier: &impl NotificationSender,
     ) -> Result<()> {
         let mut block_sub = conn
             .as_client()
@@ -48,17 +105,20 @@ impl Events {
             };
             for event in events.iter() {
                 let event = event.context("Failed to obtain event from the block")?;
-                if let Ok(Some(evt)) = event.as_event::<Rewarded>() {
-                    log::info!("Received Rewarded event: {:?}", evt);
-                } else if let Ok(Some(evt)) = event.as_event::<Transfer>() {
-                    log::info!("Received Transfer event: {:?}", evt);
-                    notifier
-                        .send_transfer_notification(crate::notifications::TransferNotification {
-                            from_account: evt.from.0,
-                            to_account: evt.to.0,
-                            amount: evt.amount,
-                        })
-                        .await?;
+                if let Ok(Some(evt)) = event.as_event::<T>() {
+                    if !predicate(&evt) {
+                        continue;
+                    }
+                    let msg = converter(&evt);
+                    let res = notifier.send_notification(msg.clone()).await;
+                    match res {
+                        Err(err) => log::error!(
+                            "Error sending notification for event: {}, error: {}",
+                            msg.to_string(),
+                            err
+                        ),
+                        Ok(_) => continue,
+                    };
                 }
             }
         }

@@ -1,3 +1,5 @@
+#![feature(trait_alias)]
+
 mod cli;
 mod events;
 mod notifications;
@@ -31,11 +33,23 @@ async fn main() -> Result<()> {
             to_account,
             targets,
         } => match targets {
-            cli::Targets::Telegram { token, chat_id } => {
+            cli::Targets::Telegram { token, user } => {
                 let telegram_bot =
-                    Arc::new(notifications::telegram::TelegramBot::new(token, chat_id)?);
+                    notifications::telegram::TelegramBot::new(token, user.try_into()?)?;
                 events
-                    .send_transfer_event_notification(conn, to_account, telegram_bot)
+                    .send_transfer_event_notification(conn, to_account, &telegram_bot)
+                    .await?
+            }
+        },
+        cli::Commands::RewardedEvent {
+            for_account,
+            targets,
+        } => match targets {
+            cli::Targets::Telegram { token, user } => {
+                let telegram_bot =
+                    notifications::telegram::TelegramBot::new(token, user.try_into()?)?;
+                events
+                    .send_rewarded_event_notification(conn, for_account, &telegram_bot)
                     .await?
             }
         },

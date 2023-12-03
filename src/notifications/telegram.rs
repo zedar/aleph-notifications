@@ -3,7 +3,7 @@ use core::fmt;
 use anyhow::{Context, Result};
 use teloxide::{prelude::*, types::Recipient};
 
-use super::NotificationSender;
+use super::{NotificationMessage, NotificationSender};
 
 /// A Telegram client communicating with a bot
 #[derive(Clone, Eq, PartialEq)]
@@ -11,35 +11,34 @@ pub struct TelegramBot {
     /// Unique token for Telegram bot
     bot_token: String,
     /// Sender unique identifier (User, Group chat) of the Telegram service
-    chat_id: i64,
+    recipient: Recipient,
 }
 
 impl fmt::Display for TelegramBot {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0b{:?}", self.chat_id)
+        write!(f, "0b{:?}", self.recipient)
     }
 }
 
 impl TelegramBot {
     /// Creates new instance of the Telegram bot
-    pub fn new(token: String, chat_id: i64) -> Result<Self> {
+    pub fn new(token: String, user: Recipient) -> Result<Self> {
         Ok(Self {
             bot_token: token,
-            chat_id,
+            recipient: user,
         })
     }
 }
 
 #[async_trait::async_trait]
 impl NotificationSender for TelegramBot {
-    async fn send_transfer_notification(&self, notif: super::TransferNotification) -> Result<()> {
-        let txt = notif.to_string();
+    async fn send_notification<T: NotificationMessage>(&self, msg: T) -> Result<()> {
+        log::info!("Sending message to Telegram: {}", msg);
+
         let bot = Bot::new(&self.bot_token);
 
-        log::info!("Sending message to telegram: {}", notif);
-
         let res = bot
-            .send_message(Recipient::Id(ChatId(self.chat_id)), txt)
+            .send_message(self.recipient.clone(), msg.format())
             .await
             .context("Failed to send message to Telegram bot")?;
 

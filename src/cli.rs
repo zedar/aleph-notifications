@@ -1,5 +1,7 @@
 use aleph_client::AccountId;
-use clap::{Parser, Subcommand};
+use anyhow::{bail, Result};
+use clap::{Args, Parser, Subcommand};
+use teloxide::types::{ChatId, Recipient};
 
 /// Utilities to interact with Aleph Zero events
 #[derive(Parser, Debug)]
@@ -25,13 +27,24 @@ pub struct Cli {
 /// Commands to capture blockchain events
 #[derive(Clone, Eq, PartialEq, Debug, Subcommand)]
 pub enum Commands {
-    /// Capture reward events for a given chain account
+    /// Capture finalized transfer events for a given on-chain account
     TransferEvent {
-        /// On-chain address for capturing reward events
+        /// On-chain address for capturing events
         #[arg(short = 'a', long)]
         to_account: AccountId,
 
-        /// Commands defining the target of the notifications
+        /// Commands defining the target notification channel
+        #[clap(subcommand)]
+        targets: Targets,
+    },
+
+    /// Capture finalized validator rewarded event for a given on-chain account
+    RewardedEvent {
+        /// On-chain address for capturing events
+        #[arg(short = 'a', long)]
+        for_account: AccountId,
+
+        /// Commands definig the target notification channel
         #[clap(subcommand)]
         targets: Targets,
     },
@@ -45,8 +58,33 @@ pub enum Targets {
         /// Telegram bot token
         #[arg(short = 't', long)]
         token: String,
-        /// Telegram channel
-        #[arg(short = 'c', long)]
-        chat_id: i64,
+
+        #[clap(flatten)]
+        user: TelegramUser,
     },
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Args)]
+#[group(required = true, multiple = false)]
+pub struct TelegramUser {
+    /// Telegram channel - at least one of chat_id|chat_username is required
+    #[arg(short = 'c', long)]
+    chat_id: Option<i64>,
+    /// Telegram username - at least one of chat_id|char_username is required
+    #[arg(short = 'u', long)]
+    channel_username: Option<String>,
+}
+
+impl TryInto<Recipient> for TelegramUser {
+    type Error = anyhow::Error;
+    fn try_into(self) -> Result<Recipient> {
+        let recipient = match self.chat_id {
+            Some(chat_id) => Recipient::Id(ChatId(chat_id)),
+            _ => match self.channel_username {
+                Some(chat_username) => Recipient::ChannelUsername(chat_username),
+                _ => bail!("missing Telegram's chat_id|username"),
+            },
+        };
+        Ok(recipient)
+    }
 }

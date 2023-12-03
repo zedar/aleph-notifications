@@ -16,3 +16,5 @@ log = "0.4.20"
 signal-hook = "0.3.17"
 teloxide = { version = "0.12.2", features = ["macros"] }
 tokio = { version = "1.34.0", features = ["full"] }
+
+subxt = { version = "0.30.1", features = ["substrate-compat"] }
