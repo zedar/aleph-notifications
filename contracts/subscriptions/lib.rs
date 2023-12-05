@@ -66,6 +66,10 @@ mod subscriptions {
         InvalidIntervalsToPay(u32),
         /// Costs of subscription too high. Required value passed as an error parameter
         SubscriptionCostTooHigh(u128),
+        /// Returned when subscription does not exists for a given account
+        NotRegisterred(AccountId),
+        /// Returned when new owner is the same as the old one
+        NewOwnerMustBeDifferent,
         /// Ink! error can be converted to this smart contract errors
         InkEnvFailure(String),
     }
@@ -88,6 +92,14 @@ mod subscriptions {
         external_channel_handle: Vec<u8>,
     }
 
+    /// Event emitted on subscription cancellation
+    #[ink(event)]
+    pub struct CancelledSubscription {
+        /// Whe cancelled the subscription.
+        #[ink(topic)]
+        for_account: AccountId,
+    }
+
     impl Subscriptions {
         /// Creates new instance of this smart contract with empty list of subscriptions.
         /// The caller of this function becomes an owner of the subscriptions registry.
@@ -108,8 +120,12 @@ mod subscriptions {
         /// * payment_interval - one of week|month
         /// * intervals_to_pay - number of paid intervales declared by the caller
         /// * external_channel_handle_id - external identifier, specific for the external channel, used by the notification service
-        /// * external_channel - external channel as identified by the string, e.g. telegram
-        /// Errors:
+        /// Events:
+        /// * NewSubscription
+        /// Fails:
+        /// * when subscription is already registerred
+        /// * when invalid payment interval
+        /// * when not enough token value transferred to the smart contract call
         #[ink(message)]
         pub fn add_subscription(
             &mut self,
@@ -162,6 +178,55 @@ mod subscriptions {
                 external_channel_handle: external_channel_handle.into_bytes(),
             });
 
+            Ok(())
+        }
+
+        /// Cancels subscription associated with a caller.
+        /// All remaining tokens are transferred back to the caller.
+        /// Events:
+        /// * CancelledSubscription
+        /// Fails:
+        /// * SubscriptionNotFound - when there is no subscription associated with the caller's account
+        #[ink(message)]
+        pub fn cancel_subscription(&mut self) -> Result<(), Error> {
+            let caller = self.env().caller();
+
+            let subscription = self
+                .subscriptions
+                .get(caller)
+                .ok_or(Error::NotRegisterred(caller))?;
+
+            // Transfer remaining token value
+            let to_return = subscription.price_per_interval
+                * (subscription.intervals_to_pay - subscription.paid_intervals) as u128;
+            self.reimburse(caller, to_return);
+
+            self.subscriptions.remove(caller);
+
+            self.env().emit_event(CancelledSubscription {
+                for_account: caller,
+            });
+
+            Ok(())
+        }
+
+        /// Transfers ownership to a new owner. Only current owner is allowed to call it.
+        /// Parameters:
+        /// * `new_owner` - new smart contract owner account
+        ///
+        /// Fails:
+        /// * caller is not an owner of the smart contract
+        /// * caller and new owner is the same account
+        #[ink(message)]
+        pub fn transfer_ownership(&mut self, new_owner: AccountId) -> Result<(), Error> {
+            let caller = self.env().caller();
+            if caller != self.owner {
+                return Err(Error::NotAuthorized);
+            }
+            if new_owner == self.owner {
+                return Err(Error::NewOwnerMustBeDifferent);
+            }
+            self.owner = new_owner;
             Ok(())
         }
 
@@ -257,6 +322,57 @@ mod subscriptions {
             assert_new_subscription(&events[0], accounts.charlie, "1111".to_string());
         }
 
+        #[ink::test]
+        fn cancel_subscription_works() {
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            // setup Bob as a contract owner
+            ink::env::test::set_account_balance::<ink::env::DefaultEnvironment>(accounts.bob, 0);
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.bob);
+            let mut subscriptions = Subscriptions::new(1u128);
+
+            // prepare balance for the Charlie as the contract caller
+            ink::env::test::set_account_balance::<ink::env::DefaultEnvironment>(
+                accounts.charlie,
+                ONE_TOKEN,
+            );
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.charlie);
+            ink::env::test::transfer_in::<ink::env::DefaultEnvironment>(ONE_TOKEN);
+            // add subscription
+            subscriptions
+                .add_subscription(PaymentInterval::Week, 1, "1111".to_string())
+                .unwrap();
+            assert!(subscriptions.subscriptions.contains(accounts.charlie));
+
+            // Charlie cancels subscription
+            subscriptions.cancel_subscription().unwrap();
+            assert!(!subscriptions.subscriptions.contains(accounts.charlie));
+
+            // test if remaining tokens are returned to the Charlie
+            assert_eq!(
+                ONE_TOKEN - ONE_WEEK_TOKENS,
+                ink::env::test::get_account_balance::<ink::env::DefaultEnvironment>(
+                    accounts.charlie
+                )
+                .unwrap()
+            );
+            // test recorded events
+            let events = recorded_events().collect::<Vec<_>>();
+            assert_new_subscription(&events[0], accounts.charlie, "1111".to_string());
+            assert_cancelled_subscription(&events[1], accounts.charlie);
+        }
+
+        #[ink::test]
+        fn only_owner_allowed_to_transfer_ownership() {
+            // given
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            let mut subscriptions = Subscriptions::new(1u128);
+            assert_eq!(subscriptions.owner, accounts.alice);
+
+            // transfer ownership to bob
+            assert!(subscriptions.transfer_ownership(accounts.bob).is_ok());
+            assert_eq!(subscriptions.owner, accounts.bob);
+        }
+
         fn assert_new_subscription(
             event: &EmittedEvent,
             expected_for_account: AccountId,
@@ -264,15 +380,31 @@ mod subscriptions {
         ) {
             let decoded_event = <Event as scale::Decode>::decode(&mut &event.data[..])
                 .expect("invalid event buffer");
-            let Event::NewSubscription(NewSubscription {
+            if let Event::NewSubscription(NewSubscription {
                 for_account,
                 external_channel_handle,
-            }) = decoded_event;
-            assert_eq!(for_account, expected_for_account);
-            assert_eq!(
-                external_channel_handle,
-                expected_external_channel_handle.into_bytes()
-            );
+            }) = decoded_event
+            {
+                assert_eq!(for_account, expected_for_account);
+                assert_eq!(
+                    external_channel_handle,
+                    expected_external_channel_handle.into_bytes()
+                );
+            } else {
+                panic!("unexpected event kind: expected NewSubcription event")
+            }
+        }
+
+        fn assert_cancelled_subscription(event: &EmittedEvent, expected_for_account: AccountId) {
+            let decoded_event = <Event as scale::Decode>::decode(&mut &event.data[..])
+                .expect("invalid event buffer");
+            if let Event::CancelledSubscription(CancelledSubscription { for_account }) =
+                decoded_event
+            {
+                assert_eq!(for_account, expected_for_account);
+            } else {
+                panic!("unexpected event kind: expected CancelSubscription event")
+            }
         }
     }
 }
