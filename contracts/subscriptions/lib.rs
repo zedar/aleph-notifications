@@ -42,6 +42,18 @@ mod subscriptions {
         /// External channel handle specific for the subscription, e.g. Telegram channel ID
         external_channel_handle: String,
     }
+
+    /// Active subscription attributes to be exposed externally
+    #[derive(Debug, Clone, PartialEq, Eq, scale::Encode, scale::Decode)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub struct ActiveSubscriptionAttr {
+        /// Who registerred new subscription. Events published for this account will result in notifications
+        for_account: AccountId,
+
+        /// A handle (e.g. chat_id) associated with the user's subscription
+        external_channel_handle: Vec<u8>,
+    }
+
     /// Defines the storage layout of this smart contract.
     #[ink(storage)]
     pub struct Subscriptions {
@@ -52,6 +64,8 @@ mod subscriptions {
         price_per_block: u128,
         /// Registered and active subscriptions
         subscriptions: Mapping<AccountId, Subscription>,
+        /// List of active subscriptions
+        active_subscriptions: Vec<AccountId>,
     }
 
     /// Errors returned by this smart contract
@@ -70,6 +84,8 @@ mod subscriptions {
         NotRegisterred(AccountId),
         /// Returned when new owner is the same as the old one
         NewOwnerMustBeDifferent,
+        /// Returned when subscription not found but is on the list of active subscriptions
+        InconsistentSubscriptionData(AccountId),
         /// Ink! error can be converted to this smart contract errors
         InkEnvFailure(String),
     }
@@ -112,6 +128,7 @@ mod subscriptions {
                 owner: Self::env().caller(),
                 price_per_block,
                 subscriptions: Mapping::default(),
+                active_subscriptions: Vec::default(),
             }
         }
 
@@ -172,6 +189,7 @@ mod subscriptions {
             );
 
             self.subscriptions.insert(caller, &subscription);
+            self.active_subscriptions.push(caller);
 
             self.env().emit_event(NewSubscription {
                 for_account: caller,
@@ -202,11 +220,39 @@ mod subscriptions {
             self.reimburse(caller, to_return);
 
             self.subscriptions.remove(caller);
+            self.active_subscriptions.retain(|acct| acct != &caller);
 
             self.env().emit_event(CancelledSubscription {
                 for_account: caller,
             });
 
+            Ok(())
+        }
+
+        /// Retrieves list of active subscriptions.
+        /// Returns:
+        /// * list of active subscriptions
+        /// Fails
+        /// * when there is an inconsistent subscription data
+        #[ink(message)]
+        pub fn get_active_subscriptions(&self) -> Result<Vec<ActiveSubscriptionAttr>, Error> {
+            let mut subs = vec![];
+            for acct in &*self.active_subscriptions {
+                let sub = self
+                    .subscriptions
+                    .get(acct)
+                    .ok_or(Error::InconsistentSubscriptionData(*acct))?;
+                subs.push(ActiveSubscriptionAttr {
+                    for_account: *acct,
+                    external_channel_handle: sub.external_channel_handle.into_bytes(),
+                });
+            }
+            Ok(subs)
+        }
+
+        /// Run payment settlement.
+        #[ink(message)]
+        pub fn payment_settlement(&mut self) -> Result<(), Error> {
             Ok(())
         }
 
@@ -264,6 +310,8 @@ mod subscriptions {
 
     #[cfg(test)]
     mod tests {
+        use core::str::FromStr;
+
         use ink::{
             env::test::{recorded_events, EmittedEvent},
             reflect::ContractEventBase,
@@ -301,6 +349,9 @@ mod subscriptions {
                 .add_subscription(PaymentInterval::Week, 1, "1111".to_string())
                 .unwrap();
             assert!(subscriptions.subscriptions.contains(accounts.charlie));
+            assert!(subscriptions
+                .active_subscriptions
+                .contains(&accounts.charlie));
 
             // alice, an owner of the contract should get payment
             assert_eq!(
@@ -342,10 +393,16 @@ mod subscriptions {
                 .add_subscription(PaymentInterval::Week, 1, "1111".to_string())
                 .unwrap();
             assert!(subscriptions.subscriptions.contains(accounts.charlie));
+            assert!(subscriptions
+                .active_subscriptions
+                .contains(&accounts.charlie));
 
             // Charlie cancels subscription
             subscriptions.cancel_subscription().unwrap();
             assert!(!subscriptions.subscriptions.contains(accounts.charlie));
+            assert!(!subscriptions
+                .active_subscriptions
+                .contains(&accounts.charlie));
 
             // test if remaining tokens are returned to the Charlie
             assert_eq!(
@@ -359,6 +416,37 @@ mod subscriptions {
             let events = recorded_events().collect::<Vec<_>>();
             assert_new_subscription(&events[0], accounts.charlie, "1111".to_string());
             assert_cancelled_subscription(&events[1], accounts.charlie);
+        }
+
+        #[ink::test]
+        fn get_active_subscriptions_works() {
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            let mut subscriptions = Subscriptions::new(0u128);
+
+            // prepare balance for the Charlie as the contract caller
+            ink::env::test::set_account_balance::<ink::env::DefaultEnvironment>(
+                accounts.charlie,
+                ONE_TOKEN,
+            );
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.charlie);
+            ink::env::test::transfer_in::<ink::env::DefaultEnvironment>(ONE_TOKEN);
+            // add subscription
+            subscriptions
+                .add_subscription(PaymentInterval::Week, 1, "1111".to_string())
+                .unwrap();
+            assert!(subscriptions.subscriptions.contains(accounts.charlie));
+            assert!(subscriptions
+                .active_subscriptions
+                .contains(&accounts.charlie));
+
+            // test list of active subscriptions
+            assert_eq!(
+                subscriptions.get_active_subscriptions().unwrap(),
+                vec![ActiveSubscriptionAttr {
+                    for_account: accounts.charlie,
+                    external_channel_handle: "1111".as_bytes().to_vec()
+                }]
+            );
         }
 
         #[ink::test]
