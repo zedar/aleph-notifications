@@ -4,7 +4,7 @@ build-service: ## Build notification service
 	cargo +nightly build --release --manifest-path ./notification-service/Cargo.toml
 
 build-contracts: ## Build smart contracts
-	cargo +nightly contract build --release --manifest-path ./contracts/subscriptions/Cargo.toml
+	cd ./contracts/subscriptions && cargo contract build --release
 
 build: build-service build-contracts ## build all
 
