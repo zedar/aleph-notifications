@@ -103,7 +103,7 @@ mod subscriptions {
         }
     }
 
-    /// Event emitted when a new subscription has been added
+    /// Event emitted when a new subscription is added
     #[ink(event)]
     pub struct NewSubscription {
         /// Who registerred new subscription. Events published for this account will result in notifications
@@ -241,7 +241,7 @@ mod subscriptions {
             Ok(())
         }
 
-        /// Retrieves list of active subscriptions.
+        /// Retrieves a list of active subscriptions.
         /// Returns:
         /// * list of active subscriptions
         /// Fails
