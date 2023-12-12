@@ -1,4 +1,7 @@
-use std::sync::{atomic::AtomicBool, Arc};
+use std::{
+    collections::HashMap,
+    sync::{atomic::AtomicBool, Arc, Mutex},
+};
 
 use aleph_client::{
     api::{balances::events::Transfer, staking::events::Rewarded},
@@ -8,41 +11,59 @@ use anyhow::{bail, Context, Result};
 use futures::StreamExt;
 use subxt::events::StaticEvent;
 
-use crate::notifications::{NotificationMessage, NotificationSender};
+use crate::{
+    notifications::{ChannelHandle, NotificationMessage, NotificationSender},
+    subscriptions::Subscription,
+};
 
 /// Events subsription logic
 #[derive(Debug)]
 pub struct Events {
     /// Terminates event handling loop
     term: Arc<AtomicBool>,
+
+    /// Subscriptions smart contract client
+    active_subscriptions: Arc<Mutex<HashMap<AccountId, Subscription>>>,
 }
 
 impl Events {
     /// Creates new instance of the events handler
-    pub fn new(term: Arc<AtomicBool>) -> Result<Self> {
-        Ok(Self { term })
+    pub fn new(
+        term: Arc<AtomicBool>,
+        active_subscriptions: Arc<Mutex<HashMap<AccountId, Subscription>>>,
+    ) -> Result<Self> {
+        Ok(Self {
+            term,
+            active_subscriptions,
+        })
     }
 
     /// Sends notification about every transfer event for a given on-chain address
     pub async fn send_transfer_event_notification(
         &self,
         conn: Connection,
-        stash_account: AccountId,
         notifier: &impl NotificationSender,
     ) -> Result<()> {
         self.send_event_notification(
             conn,
             |evt: &Transfer| {
-                if evt.to.0 == stash_account {
-                    true
-                } else {
-                    false
-                }
+                let active_subscriptions = self.active_subscriptions.lock().unwrap();
+                active_subscriptions.contains_key(&evt.to.0)
             },
             |evt: &Transfer| crate::notifications::TransferNotification {
                 from_account: evt.from.0.clone(),
                 to_account: evt.to.0.clone(),
                 amount: evt.amount,
+            },
+            |evt: &Transfer| -> Result<ChannelHandle> {
+                let active_subscriptions = self.active_subscriptions.lock().unwrap();
+                Ok(ChannelHandle(
+                    active_subscriptions
+                        .get(&evt.to.0)
+                        .ok_or(anyhow::anyhow!("subscription not found"))?
+                        .channel_handle
+                        .clone(),
+                ))
             },
             notifier,
         )
@@ -53,21 +74,27 @@ impl Events {
     pub async fn send_rewarded_event_notification(
         &self,
         conn: Connection,
-        stash_account: AccountId,
         notifier: &impl NotificationSender,
     ) -> Result<()> {
         self.send_event_notification(
             conn,
             |evt: &Rewarded| {
-                if evt.stash.0 == stash_account {
-                    true
-                } else {
-                    false
-                }
+                let active_subscriptions = self.active_subscriptions.lock().unwrap();
+                active_subscriptions.contains_key(&evt.stash.0)
             },
             |evt: &Rewarded| crate::notifications::RewardedNotification {
                 stash_account: evt.stash.0.clone(),
                 amount: evt.amount,
+            },
+            |evt: &Rewarded| -> Result<ChannelHandle> {
+                let active_subscriptions = self.active_subscriptions.lock().unwrap();
+                Ok(ChannelHandle(
+                    active_subscriptions
+                        .get(&evt.stash.0)
+                        .ok_or(anyhow::anyhow!("subscription not found"))?
+                        .channel_handle
+                        .clone(),
+                ))
             },
             notifier,
         )
@@ -79,11 +106,13 @@ impl Events {
         M: NotificationMessage,
         P: Fn(&T) -> bool + Send,
         C: Fn(&T) -> M,
+        H: Fn(&T) -> Result<ChannelHandle>,
     >(
         &self,
         conn: Connection,
         predicate: P,
         converter: C,
+        channel_handle_extractor: H,
         notifier: &impl NotificationSender,
     ) -> Result<()> {
         let mut block_sub = conn
@@ -110,7 +139,9 @@ impl Events {
                         continue;
                     }
                     let msg = converter(&evt);
-                    let res = notifier.send_notification(msg.clone()).await;
+                    let res = notifier
+                        .send_notification(msg.clone(), channel_handle_extractor(&evt)?)
+                        .await;
                     match res {
                         Err(err) => log::error!(
                             "Error sending notification for event: {}, error: {}",

@@ -1,7 +1,7 @@
+use std::path::PathBuf;
+
 use aleph_client::AccountId;
-use anyhow::{bail, Result};
-use clap::{Args, Parser, Subcommand};
-use teloxide::types::{ChatId, Recipient};
+use clap::{Parser, Subcommand};
 
 /// Utilities to interact with Aleph Zero events
 #[derive(Parser, Debug)]
@@ -19,6 +19,14 @@ pub struct Cli {
     #[clap(short = 'n', long = "node", default_value = "ws://localhost:9944")]
     pub node_address: String,
 
+    /// On chain address of KYB registry smart contract
+    #[clap(short = 'c')]
+    pub sc_address: AccountId,
+
+    /// Path to the contract's metadata json file
+    #[clap(short = 'm', default_value = "metadata.json", value_parser = parsing::parse_path)]
+    pub sc_metadata: PathBuf,
+
     /// Commands to interact with Aleph Zero events
     #[clap(subcommand)]
     pub commands: Commands,
@@ -29,10 +37,6 @@ pub struct Cli {
 pub enum Commands {
     /// Capture finalized transfer events for a given on-chain account
     TransferEvent {
-        /// On-chain address for capturing events
-        #[arg(short = 'a', long)]
-        to_account: AccountId,
-
         /// Commands defining the target notification channel
         #[clap(subcommand)]
         targets: Targets,
@@ -40,10 +44,6 @@ pub enum Commands {
 
     /// Capture finalized validator rewarded event for a given on-chain account
     RewardedEvent {
-        /// On-chain address for capturing events
-        #[arg(short = 'a', long)]
-        for_account: AccountId,
-
         /// Commands definig the target notification channel
         #[clap(subcommand)]
         targets: Targets,
@@ -58,33 +58,16 @@ pub enum Targets {
         /// Telegram bot token
         #[arg(short = 't', long)]
         token: String,
-
-        #[clap(flatten)]
-        user: TelegramUser,
     },
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Args)]
-#[group(required = true, multiple = false)]
-pub struct TelegramUser {
-    /// Telegram channel - at least one of chat_id|chat_username is required
-    #[arg(short = 'c', long)]
-    chat_id: Option<i64>,
-    /// Telegram username - at least one of chat_id|char_username is required
-    #[arg(short = 'u', long)]
-    channel_username: Option<String>,
-}
+mod parsing {
+    use std::{path::PathBuf, str::FromStr};
 
-impl TryInto<Recipient> for TelegramUser {
-    type Error = anyhow::Error;
-    fn try_into(self) -> Result<Recipient> {
-        let recipient = match self.chat_id {
-            Some(chat_id) => Recipient::Id(ChatId(chat_id)),
-            _ => match self.channel_username {
-                Some(chat_username) => Recipient::ChannelUsername(chat_username),
-                _ => bail!("missing Telegram's chat_id|username"),
-            },
-        };
-        Ok(recipient)
+    use anyhow::{Context, Result};
+
+    pub(super) fn parse_path(path: &str) -> Result<PathBuf> {
+        let expanded_path = shellexpand::full(path).context("failed to expand the path")?;
+        PathBuf::from_str(&expanded_path).context("failed to parse the path")
     }
 }

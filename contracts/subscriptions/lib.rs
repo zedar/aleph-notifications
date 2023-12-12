@@ -40,7 +40,7 @@ mod subscriptions {
         paid_intervals: u32,
         /// Price per interval calculated at the time of subscription registration
         /// Units - the smallest unit, e.g. 1_000_000_000_000 = 1DZERO, 1TZERO, 1AZERO
-        price_per_interval: u128,
+        price_per_interval: Balance,
         /// Registered at
         registered_at: BlockNumber,
         /// Last payment at
@@ -67,7 +67,7 @@ mod subscriptions {
         owner: AccountId,
         /// Price per subscription per block that can be translated to a payment interval
         /// Units - the smallest unit, e.g. 1_000_000_000_000 = 1DZERO, 1TZERO, 1AZERO
-        price_per_block: u128,
+        price_per_block: Balance,
         /// Registered and active subscriptions
         subscriptions: Mapping<AccountId, Subscription>,
         /// List of active subscriptions
@@ -85,7 +85,7 @@ mod subscriptions {
         /// Returned when too low (==0) number of intervals to pay has been provided
         InvalidIntervalsToPay(u32),
         /// Costs of subscription too high. Required value passed as an error parameter
-        SubscriptionCostTooHigh(u128),
+        SubscriptionCostTooHigh(Balance),
         /// Returned when subscription does not exists for a given account
         NotRegisterred(AccountId),
         /// Returned when new owner is the same as the old one
@@ -135,7 +135,7 @@ mod subscriptions {
         /// Parameters:
         /// * `price_per_block` - price the subscriber needs to pay for the number of blocks translated to the payment interval.
         #[ink(constructor)]
-        pub fn new(price_per_block: u128) -> Self {
+        pub fn new(price_per_block: Balance) -> Self {
             Self {
                 owner: Self::env().caller(),
                 price_per_block,
@@ -155,7 +155,7 @@ mod subscriptions {
         /// * when subscription is already registerred
         /// * when invalid payment interval
         /// * when not enough token value transferred to the smart contract call
-        #[ink(message)]
+        #[ink(message, payable)]
         pub fn add_subscription(
             &mut self,
             payment_interval: PaymentInterval,
@@ -217,7 +217,7 @@ mod subscriptions {
         /// * CancelledSubscription
         /// Fails:
         /// * SubscriptionNotFound - when there is no subscription associated with the caller's account
-        #[ink(message)]
+        #[ink(message, payable)]
         pub fn cancel_subscription(&mut self) -> Result<(), Error> {
             let caller = self.env().caller();
 
@@ -267,7 +267,7 @@ mod subscriptions {
         /// * is it still active
         /// * does it have enough funds for the next interval
         /// If above rules are not fulfilled subscription is automatically cancelled
-        #[ink(message)]
+        #[ink(message, payable)]
         pub fn payment_settlement(&mut self) -> Result<(), Error> {
             self.authorized(self.env().caller())?;
 
@@ -331,12 +331,12 @@ mod subscriptions {
         #[ink(message)]
         pub fn transfer_ownership(&mut self, new_owner: AccountId) -> Result<(), Error> {
             let caller = self.env().caller();
-            if caller != self.owner {
-                return Err(Error::NotAuthorized);
-            }
+            self.authorized(caller)?;
+
             if new_owner == self.owner {
                 return Err(Error::NewOwnerMustBeDifferent);
             }
+
             self.owner = new_owner;
             Ok(())
         }
@@ -348,7 +348,7 @@ mod subscriptions {
             Ok(())
         }
 
-        fn price_per_interval(&self, payment_interval: &PaymentInterval) -> u128 {
+        fn price_per_interval(&self, payment_interval: &PaymentInterval) -> Balance {
             self.price_per_block
                 * match payment_interval {
                     PaymentInterval::Week => BLOCKS_PER_WEEK as u128,
@@ -370,7 +370,7 @@ mod subscriptions {
         }
 
         /// Transfers amount of tokens from the contract's account to the owner account.
-        fn transfer_to_owner(&self, amount: u128) {
+        fn transfer_to_owner(&self, amount: Balance) {
             if Self::env().transfer(self.owner, amount).is_err() {
                 panic!("failed to transfer tokens to owner")
             }
@@ -379,7 +379,7 @@ mod subscriptions {
         /// Reimburses the caller with overpaid tokens.
         /// Panics if the transfer fails - this means this contract's balance is
         /// too low which means something went wrong.
-        fn reimburse(&self, recipient: AccountId, amount: u128) {
+        fn reimburse(&self, recipient: AccountId, amount: Balance) {
             if Self::env().transfer(recipient, amount).is_err() {
                 panic!("failed to reimburse the caller")
             }

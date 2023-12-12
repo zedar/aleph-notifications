@@ -3,6 +3,7 @@
 mod cli;
 mod events;
 mod notifications;
+mod subscriptions;
 
 use std::sync::{atomic::AtomicBool, Arc};
 
@@ -19,6 +20,13 @@ async fn main() -> Result<()> {
 
     log::info!("{:?}", cli);
 
+    log::info!("Establishing smart contract client...");
+    let mut subscriptions =
+        subscriptions::Subscriptions::new(cli.sc_address, &cli.node_address, &cli.sc_metadata)?;
+    log::info!("Initializing subscriptions...");
+    subscriptions.init_subscriptions().await?;
+    log::info!("Smart contract client is live... {:?}", subscriptions);
+
     log::info!("Establishing connection...");
     let conn = aleph_client::Connection::new(&cli.node_address).await;
     log::info!("Connection is live...");
@@ -26,30 +34,25 @@ async fn main() -> Result<()> {
     let term = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(SIGINT, Arc::clone(&term))?;
 
-    let events = Events::new(Arc::clone(&term))?;
+    let events = Events::new(
+        Arc::clone(&term),
+        subscriptions.active_subscriptions.clone(),
+    )?;
 
     match cli.commands {
-        cli::Commands::TransferEvent {
-            to_account,
-            targets,
-        } => match targets {
-            cli::Targets::Telegram { token, user } => {
-                let telegram_bot =
-                    notifications::telegram::TelegramBot::new(token, user.try_into()?)?;
+        cli::Commands::TransferEvent { targets } => match targets {
+            cli::Targets::Telegram { token } => {
+                let telegram_bot = notifications::telegram::TelegramBot::new(token)?;
                 events
-                    .send_transfer_event_notification(conn, to_account, &telegram_bot)
+                    .send_transfer_event_notification(conn, &telegram_bot)
                     .await?
             }
         },
-        cli::Commands::RewardedEvent {
-            for_account,
-            targets,
-        } => match targets {
-            cli::Targets::Telegram { token, user } => {
-                let telegram_bot =
-                    notifications::telegram::TelegramBot::new(token, user.try_into()?)?;
+        cli::Commands::RewardedEvent { targets } => match targets {
+            cli::Targets::Telegram { token } => {
+                let telegram_bot = notifications::telegram::TelegramBot::new(token)?;
                 events
-                    .send_rewarded_event_notification(conn, for_account, &telegram_bot)
+                    .send_rewarded_event_notification(conn, &telegram_bot)
                     .await?
             }
         },

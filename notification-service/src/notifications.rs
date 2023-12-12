@@ -67,9 +67,16 @@ impl FormatToString for RewardedNotification {
 /// Alias for bounded notification message. This is an experimental feature that must be enabled with #![feature(trait_alias)]
 pub trait NotificationMessage = Clone + FormatToString + std::fmt::Display + Send;
 
+/// Represents channel handle convertible to e.g. Telegram user/chat id
+pub struct ChannelHandle(pub String);
+
 /// Sending various notifications
 #[async_trait::async_trait]
 pub trait NotificationSender {
     /// Sends notification about on-chain event
-    async fn send_notification<T: NotificationMessage>(&self, msg: T) -> Result<()>;
+    async fn send_notification<T: NotificationMessage>(
+        &self,
+        msg: T,
+        channel_handle: ChannelHandle,
+    ) -> Result<()>;
 }

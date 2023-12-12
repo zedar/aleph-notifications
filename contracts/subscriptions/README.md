@@ -41,13 +41,25 @@ Execute below commands from the main directory
 ## Deploying smart contract
 
 Any wallet connected to the Aleph Zero network compatible with the Ink! version 4.0.1 can be used. 
-Or local Aleph Zero network can be used with the following deployment command:
-
-	$ cargo contract instantiate --args 10  --suri //Alice ./contracts/subscriptions/target/ink/subscriptions.contract	
-	
-The smart contract constructor requires to pass a price per block (AZERO tokens). 
+The smart contract constructor requires to pass a price per block (`DZERO`, `TZERO`, or `AZERO` tokens). 
 Each payment interval is converted into a number of blocks corresponding to the token value.
+The argument of constructor represents `Balance`, which can be defined as `xx.xxxxx{unit}{token symbol}`, e.g.:
 
+* unit: `G` - Giga, `M` - Mega, `k` - Kilo, `m` - Milli, `\u{3bc}` - Micro, `n` - Nano, `other` - One
+* token symbol - `DZERO`, `TZERO`, `AZERO`
+
+Local Aleph Zero network can be used with the following deployment commands:
+
+  $ cd ./contracts/subscriptions
+  $ cargo contract instantiate --args 0.000000001_DZERO  --suri //Alice ./target/ink/subscriptions.contract
+
+## Example smart contract calls
+
+### Add new subscription
+
+  $ cd ./contracts/subscriptions
+  $ cargo contract call --value 10_DZERO --contract 5HNUxNYxbvZi1maj3VDgoJV1zPvyMwrb3wRGihf9wFBajypU --message add_subscription --args Week 1 \"chat_id:123456\" --suri //Alice
+  
 # Architecture
 
 The `Subscriptions` smart contract allows to subscribe to on-chain event notifications, e.g. Rewarded nominator event.
