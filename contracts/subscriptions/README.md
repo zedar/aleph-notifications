@@ -48,6 +48,8 @@ The argument of constructor represents `Balance`, which can be defined as `xx.xx
 * unit: `G` - Giga, `M` - Mega, `k` - Kilo, `m` - Milli, `\u{3bc}` - Micro, `n` - Nano, `other` - One
 * token symbol - `DZERO`, `TZERO`, `AZERO`
 
+Note: [how denominated balance is interpeted](https://github.com/paritytech/cargo-contract/blob/master/crates/extrinsics/src/balance.rs#L43).
+
 Local Aleph Zero network can be used with the following deployment commands:
 
   $ cd ./contracts/subscriptions

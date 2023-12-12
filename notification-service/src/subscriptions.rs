@@ -1,14 +1,15 @@
 use std::{
     collections::HashMap,
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{atomic::AtomicBool, Arc, Mutex},
 };
 
 use aleph_client::{
-    contract::{ContractInstance, ConvertibleValue},
+    contract::{event::translate_events, ContractInstance, ConvertibleValue},
     AccountId, Connection,
 };
 use anyhow::{anyhow, bail, Context, Result};
+use futures::StreamExt;
 
 /// Represents subscription for on-chain account
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -64,10 +65,15 @@ impl TryFrom<ConvertibleValue> for Subscription {
 
 /// Represents a middleware communicating with Subscriptions smart contract
 pub struct Subscriptions {
+    /// Terminates event handling loop
+    term: Arc<AtomicBool>,
+
     /// An instance of the smart contract client
     contract: ContractInstance,
+
     /// A connection to the aleph zero node
     connection: Connection,
+
     /// List of active subscriptions, each represented as an on-chain account id
     pub active_subscriptions: Arc<Mutex<HashMap<AccountId, Subscription>>>,
 }
@@ -80,7 +86,12 @@ impl std::fmt::Debug for Subscriptions {
 
 impl Subscriptions {
     /// Create new instance of the Subscriptions smart contract wrapper
-    pub fn new(sc_address: AccountId, node_address: &str, sc_metadata_path: &Path) -> Result<Self> {
+    pub fn new(
+        term: Arc<AtomicBool>,
+        sc_address: AccountId,
+        node_address: &str,
+        sc_metadata_path: &Path,
+    ) -> Result<Self> {
         let sc_matadata_path = sc_metadata_path
             .to_str()
             .context("Smart contract's metadata not set")?;
@@ -88,6 +99,7 @@ impl Subscriptions {
         let conn = futures::executor::block_on(Connection::new(node_address));
 
         Ok(Self {
+            term,
             contract: ContractInstance::new(sc_address, sc_matadata_path)?,
             connection: conn,
             active_subscriptions: Arc::new(Mutex::new(HashMap::default())),
@@ -115,8 +127,40 @@ impl Subscriptions {
         Ok(())
     }
 
-    /// Listens for smart contract
+    /// Listens for smart contract events: NewSubscription, CancelledSubscription, CancelledSubscriptions
+    /// For each event either add new subscription or remove active subscriptions.
     pub async fn handle_events(&mut self) -> Result<()> {
-        Ok(())
+        let mut block_sub = self
+            .connection
+            .as_client()
+            .blocks()
+            .subscribe_finalized()
+            .await
+            .context("failed to subscribe for subscriptions smart contract events")?;
+
+        log::info!("aleph-client for subscriptions smart contract is waiting for events...");
+
+        while let Some(Ok(block)) = block_sub.next().await {
+            if self.term.load(std::sync::atomic::Ordering::Relaxed) {
+                bail!("Subscriptions smart contract event loop terminated")
+            }
+
+            let events = match block.events().await {
+                Ok(events) => events,
+                _ => continue,
+            };
+
+            for event in translate_events(
+                events.iter(),
+                &[&self.contract],
+                Some(aleph_client::contract::event::BlockDetails {
+                    block_number: block.number(),
+                    block_hash: block.hash(),
+                }),
+            ) {
+                log::info!("Subscription contract event: {:?}", event);
+            }
+        }
+        bail!("No more blocks to proceed")
     }
 }

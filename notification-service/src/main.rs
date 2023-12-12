@@ -20,24 +20,34 @@ async fn main() -> Result<()> {
 
     log::info!("{:?}", cli);
 
+    let term = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(SIGINT, Arc::clone(&term))?;
+
     log::info!("Establishing smart contract client...");
-    let mut subscriptions =
-        subscriptions::Subscriptions::new(cli.sc_address, &cli.node_address, &cli.sc_metadata)?;
+    let mut subscriptions = subscriptions::Subscriptions::new(
+        Arc::clone(&term),
+        cli.sc_address,
+        &cli.node_address,
+        &cli.sc_metadata,
+    )?;
     log::info!("Initializing subscriptions...");
     subscriptions.init_subscriptions().await?;
-    log::info!("Smart contract client is live... {:?}", subscriptions);
+    log::info!("Subscriptions initialized: {:?}", subscriptions);
 
     log::info!("Establishing connection...");
     let conn = aleph_client::Connection::new(&cli.node_address).await;
     log::info!("Connection is live...");
 
-    let term = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(SIGINT, Arc::clone(&term))?;
-
     let events = Events::new(
         Arc::clone(&term),
         subscriptions.active_subscriptions.clone(),
     )?;
+
+    let join = tokio::spawn(async move {
+        log::info!("Subscriptions smart contract event loop is live...");
+        subscriptions.handle_events().await?;
+        <Result<(), anyhow::Error>>::Ok(())
+    });
 
     match cli.commands {
         cli::Commands::TransferEvent { targets } => match targets {
@@ -57,6 +67,8 @@ async fn main() -> Result<()> {
             }
         },
     }
+
+    join.await??;
 
     Ok(())
 }
