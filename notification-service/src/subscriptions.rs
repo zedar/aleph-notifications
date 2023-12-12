@@ -114,4 +114,9 @@ impl Subscriptions {
 
         Ok(())
     }
+
+    /// Listens for smart contract
+    pub async fn handle_events(&mut self) -> Result<()> {
+        Ok(())
+    }
 }

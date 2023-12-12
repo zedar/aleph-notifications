@@ -55,7 +55,7 @@ Find the `aleph-notifications` Telegram bot and start the channel. This step is 
 
 Send notifications about transfer event to the Telegram channel. Connect to the local node (version `r-12.1`).
 
-  $ ./notification-service/target/release/notification_service -n ws://127.0.0.1:9944 -c 5D1pLerTJSA2WqHJELxXZL1LVJ87WVP5WEo5CFZtCh1ad8Hp -m contracts/subscriptions/target/ink/subscriptions.json transfer-event telegram --token 6337032059:AAFifPmavLTPzZzcWfff3d-jCcEr99SU7vQ	$ cargo run --release -- -n wss://ws.test.azero.dev:443 transfer-event -a 5GRkePp3CqPJXkfbt52G4XdZp4Pi4oQaHyERNrFX6fxB73HU telegram -t <bot token> -c <channel id>
+  $ ./notification-service/target/release/notification_service -n ws://127.0.0.1:9944 -c <smart contract address> -m contracts/subscriptions/target/ink/subscriptions.json transfer-event telegram --token <telegram bot token>
 
 # Architecture
 
