@@ -3,8 +3,6 @@ Aleph zero notification service
 
 `notification_service` is `Aleph Zero` network client that subscribes to events and sends notification to variaty of channels (e.g. Telegram).
 
-This project is being developed as part of the hackaton [Aleph Zero Hackaton](https://techfiesta.dev/techfiestas/9/aleph-zero-hackathon).
-
 # Repository structure
 
 This repository contains:
