@@ -2649,6 +2649,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "clap",
+ "contract-transcode",
  "env_logger",
  "futures",
  "log",

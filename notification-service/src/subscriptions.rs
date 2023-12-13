@@ -158,9 +158,136 @@ impl Subscriptions {
                     block_hash: block.hash(),
                 }),
             ) {
-                log::info!("Subscription contract event: {:?}", event);
+                if event.is_err() {
+                    log::error!(
+                        "Error receiving Subscriptions contract event: {:?}",
+                        event.err()
+                    );
+                    continue;
+                }
+                let event = event.unwrap();
+                log::info!("Received smart contract event: {:?}", event);
+                match &event.name {
+                    Some(n) if n == "NewSubscription" => {
+                        let for_account =
+                            match self.decode_account_id(event.data.get("for_account")) {
+                                Ok(v) => v,
+                                Err(err) => {
+                                    log::error!(
+                                        "AddSubscription event failed to decode for_account: {}",
+                                        err
+                                    );
+                                    continue;
+                                }
+                            };
+
+                        let channel_handle =
+                            match self.decode_string(event.data.get("external_channel_handle")) {
+                                Ok(v) => v,
+                                Err(err) => {
+                                    log::error!(
+                                        "AddSubscription event failed to decode channel_handle: {}",
+                                        err
+                                    );
+                                    continue;
+                                }
+                            };
+
+                        let mut active_subscriptions = match self.active_subscriptions.lock() {
+                            Ok(v) => v,
+                            Err(err) => {
+                                log::error!("Unable to lock active_subscriptions: {:?}", err);
+                                continue;
+                            }
+                        };
+                        active_subscriptions.insert(
+                            for_account.clone(),
+                            Subscription {
+                                for_account: for_account.clone(),
+                                channel_handle,
+                            },
+                        );
+
+                        log::info!("New subscription for account: {:?}", for_account);
+                    }
+                    Some(n) if n == "CancelledSubscription" => {
+                        let for_account =
+                            match self.decode_account_id(event.data.get("for_account")) {
+                                Ok(v) => v,
+                                Err(err) => {
+                                    log::error!(
+                                        "CancelSubscription event failed to decode for_account: {}",
+                                        err
+                                    );
+                                    continue;
+                                }
+                            };
+                        let mut active_subscriptions = match self.active_subscriptions.lock() {
+                            Ok(v) => v,
+                            Err(err) => {
+                                log::error!("Unable to lock active_subscriptions: {:?}", err);
+                                continue;
+                            }
+                        };
+                        active_subscriptions.remove(&for_account);
+
+                        log::info!("Cancelled subscription for account: {:?}", for_account);
+                    }
+                    Some(n) if n == "CancelledSubscriptions" => {
+                        let for_accounts =
+                            match self.decode_account_ids(event.data.get("for_accounts")) {
+                                Ok(v) => v,
+                                Err(err) => {
+                                    log::error!(
+                                    "CancelSubscriptions event failed to decode for_accounts: {}",
+                                    err
+                                );
+                                    continue;
+                                }
+                            };
+                        let mut active_subscriptions = match self.active_subscriptions.lock() {
+                            Ok(v) => v,
+                            Err(err) => {
+                                log::error!("Unable to lock active_subscriptions: {:?}", err);
+                                continue;
+                            }
+                        };
+                        for for_account in for_accounts.iter() {
+                            active_subscriptions.remove(for_account);
+                        }
+                    }
+                    Some(n) => {
+                        log::warn!("Not matched smart contract event name: {}", n);
+                        continue;
+                    }
+                    None => {
+                        log::warn!("Undefined smart contract event name");
+                        continue;
+                    }
+                };
             }
         }
         bail!("No more blocks to proceed")
+    }
+
+    fn decode_account_id(&self, v: Option<&contract_transcode::Value>) -> Result<AccountId> {
+        match v {
+            Some(v) => ConvertibleValue(v.clone()).try_into(),
+            None => bail!("missing attribute of type AccountId"),
+        }
+    }
+
+    fn decode_string(&self, v: Option<&contract_transcode::Value>) -> Result<String> {
+        match v {
+            Some(v) => ConvertibleValue(v.clone()).try_into(),
+            None => bail!("missing attribute of type string"),
+        }
+    }
+
+    fn decode_account_ids(&self, v: Option<&contract_transcode::Value>) -> Result<Vec<AccountId>> {
+        match v {
+            Some(v) => ConvertibleValue(v.clone()).try_into(),
+            None => bail!("missing attribute of type Seq<Value>"),
+        }
     }
 }

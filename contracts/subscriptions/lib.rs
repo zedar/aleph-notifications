@@ -227,9 +227,21 @@ mod subscriptions {
                 .ok_or(Error::NotRegisterred(caller))?;
 
             // Transfer remaining token value
-            let to_return = subscription.price_per_interval
-                * (subscription.declared_payment_intervals - subscription.paid_intervals) as u128;
-            self.reimburse(caller, to_return);
+            let mut to_return: Balance = 0;
+            if subscription.declared_payment_intervals > subscription.paid_intervals {
+                to_return = subscription.price_per_interval
+                    * (subscription.declared_payment_intervals - subscription.paid_intervals)
+                        as u128;
+            }
+
+            // Get all transferred tokens. We need to return them.
+            let transferred_value = self.env().transferred_value();
+            to_return += transferred_value;
+
+            // If there is something to return
+            if to_return > 0 {
+                self.reimburse(caller, to_return);
+            }
 
             self.subscriptions.remove(caller);
             self.active_subscriptions.retain(|acct| acct != &caller);

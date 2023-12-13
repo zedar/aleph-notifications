@@ -45,7 +45,7 @@ The smart contract constructor requires to pass a price per block (`DZERO`, `TZE
 Each payment interval is converted into a number of blocks corresponding to the token value.
 The argument of constructor represents `Balance`, which can be defined as `xx.xxxxx{unit}{token symbol}`, e.g.:
 
-* unit: `G` - Giga, `M` - Mega, `k` - Kilo, `m` - Milli, `\u{3bc}` - Micro, `n` - Nano, `other` - One
+* unit: `G` - Giga, `M` - Mega, `k` - Kilo, `m` - Milli (0.001), `\u{3bc}` - Micro (0.000_001), `n` - Nano (0.000_000_001), `other` - One
 * token symbol - `DZERO`, `TZERO`, `AZERO`
 
 Note: [how denominated balance is interpeted](https://github.com/paritytech/cargo-contract/blob/master/crates/extrinsics/src/balance.rs#L43).
@@ -53,14 +53,14 @@ Note: [how denominated balance is interpeted](https://github.com/paritytech/carg
 Local Aleph Zero network can be used with the following deployment commands:
 
   $ cd ./contracts/subscriptions
-  $ cargo contract instantiate --args 0.000000001_DZERO  --suri //Alice ./target/ink/subscriptions.contract
+  $ cargo contract instantiate --args 1nDZERO  --suri //Alice ./target/ink/subscriptions.contract
 
 ## Example smart contract calls
 
 ### Add new subscription
 
   $ cd ./contracts/subscriptions
-  $ cargo contract call --value 10_DZERO --contract 5HNUxNYxbvZi1maj3VDgoJV1zPvyMwrb3wRGihf9wFBajypU --message add_subscription --args Week 1 \"chat_id:123456\" --suri //Alice
+  $ cargo contract call --value 2_DZERO --contract 5HNUxNYxbvZi1maj3VDgoJV1zPvyMwrb3wRGihf9wFBajypU --message add_subscription --args Week 1 \"chat_id:123456\" --suri //Alice
   
 # Architecture
 

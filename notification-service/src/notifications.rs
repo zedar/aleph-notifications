@@ -1,4 +1,4 @@
-use aleph_client::AccountId;
+use aleph_client::{AccountId, Balance};
 use anyhow::Result;
 
 pub mod telegram;
@@ -16,7 +16,7 @@ pub struct TransferNotification {
     /// The account to which transfer was directed
     pub to_account: AccountId,
     /// Amount of tokens: unit is the smallest token unit, e.g. 1_000_000_000_000 = 1DZERO    
-    pub amount: u128,
+    pub amount: Balance,
 }
 
 /// Notification must implement display trait to be prinatable
@@ -30,11 +30,21 @@ impl std::fmt::Display for TransferNotification {
 impl FormatToString for TransferNotification {
     fn format(&self) -> String {
         format!(
-            "New transfer from account {:?}, amount {:.4}",
+            "New transfer from account {:?}, amount {}",
             self.from_account,
-            self.amount as f64 / 1_000_000_000_000_f64
+            print_with_4_digits(self.amount, 1_000_000_000_000u128) //self.amount as f64 / 1_000_000_000_000_f64
         )
     }
+}
+
+fn print_with_4_digits(a: u128, b: u128) -> String {
+    let a_mul = a * 10000;
+    let div = a_mul / b;
+
+    let frac = div % 10000;
+    let rest = div / 10000;
+
+    format!("{}.{:#03}", rest, frac)
 }
 
 /// Represents notification about the nominator reward
@@ -43,7 +53,7 @@ pub struct RewardedNotification {
     /// The account used by the nominator for stashing
     pub stash_account: AccountId,
     /// Amount of reward: unit is the smallest token unit, e.g. 1_000_000_000_000 = 1DZERO        
-    pub amount: u128,
+    pub amount: Balance,
 }
 
 /// Notification must implement display trait to be printable
@@ -57,9 +67,9 @@ impl std::fmt::Display for RewardedNotification {
 impl FormatToString for RewardedNotification {
     fn format(&self) -> String {
         format!(
-            "New reward for nominating from account {:?}, amount {:.4}",
+            "New reward for nominating from account {:?}, amount {}",
             self.stash_account,
-            self.amount as f64 / 1_000_000_000_000_f64
+            print_with_4_digits(self.amount, 1_000_000_000_000u128) //self.amount as f64 / 1_000_000_000_000_f64
         )
     }
 }
