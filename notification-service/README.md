@@ -96,6 +96,10 @@ Send notifications about transfer event to the Telegram channel. Connect to the 
 
   $ ./notification-service/target/release/notification_service -n ws://127.0.0.1:9944 -c <smart contract address> -m contracts/subscriptions/target/ink/subscriptions.json transfer-event telegram --token <telegram bot token>
 
+Example transfer notification sent to the Telegram bot.
+
+![Example transfer notification event](../images/example_transfer_notification.png)
+
 ## Capture on-chain Rewarded event and send notification about it to the Telegram channel
 
 Send notifications about nominator's `Rewarded` event to the Telegram channel. Connect to the local node (version `r-12.1`).

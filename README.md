@@ -10,8 +10,8 @@ Note: this project is being developed as part of the hackaton [Aleph Zero Hackat
 
 This repository contains 2 sub-projects:
 
-1. [Notification service](./notification-service/README.md)
-2. [Subscriptions smart contract](./contracts/subscriptions/README.md)
+1. [Subscriptions smart contract](./contracts/subscriptions/README.md)
+2. [Notification service](./notification-service/README.md)
 
 # Architecture
 
