@@ -3,6 +3,12 @@ Aleph Zero notifications and subscriptions
 
 This project is a `notification-service` that sends notifications about events on the **Aleph Zero** chain to subscribed on-chain accounts.
 Notifications are sent to various channels, including Telegram.
+Subscriptions are managed by on-chain smart contract, while notifications are managed by an off-chain service.
+The notification service subscribes to events from:
+* smart contract (see architecture below)
+* on-chain events, e.g. Transfer, Rewarded.
+The notification service sends notifications about on-chain events to external channels, e.g. Telegram.
+The `Subscriptions` smart contract allows to register a new subscription, cancel a subscription, and payment settlement for payment intervals.
 
 Note: this project is being developed as part of the hackaton [Aleph Zero Hackaton](https://techfiesta.dev/techfiestas/9/aleph-zero-hackathon).
 
