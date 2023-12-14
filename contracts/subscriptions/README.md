@@ -1,7 +1,7 @@
 Subscription smart contract for the aleph-notification service
 ==============================================================
 
-`subscriptions` is a contract that allows users to subscribe for aleph zero chain events and get notified via variaty of channels (e.g. Telegram).
+`Subscriptions` is a contract that allows users to subscribe for aleph zero chain events and get notified via variaty of channels (e.g. Telegram).
 
 # Repository structure
 
@@ -50,17 +50,45 @@ The argument of constructor represents `Balance`, which can be defined as `xx.xx
 
 Note: [how denominated balance is interpeted](https://github.com/paritytech/cargo-contract/blob/master/crates/extrinsics/src/balance.rs#L43).
 
-Local Aleph Zero network can be used with the following deployment commands:
+### Local Aleph Zero network
+
+1. Clone [Aleph node repository](https://github.com/Cardinal-Cryptography/aleph-node)
+2. Switch to `r-12.1` version
+
+  $ cd aleph-node
+  $ git checkout r-12.1
+
+3. Run aleph network with 4 nodes
+
+  $ ./scripts/run_nodes.sh
+
+In order to stop aleph network you can run: `killall -9 aleph-node`.
+
+Hint: when aleph network stops working after ~20 blocks, add the following command at the beginning of the `run_nodes.sh` script:
+
+  rm -rf "$BASE_PATH"/**/backup-stash  
+ 
+To deploy `Subscriptions` smart contract on your local aleph network, you can run the following commands
 
   $ cd ./contracts/subscriptions
   $ cargo contract instantiate --args 1nDZERO  --suri //Alice ./target/ink/subscriptions.contract
+
+The deployed smart contract address can be found in the following line:
+
+  Contract 5Ca2yzwnf5V83r99YqfUA8QdPVMf1Mg46wDof7mRSQbgr1ea
 
 ## Example smart contract calls
 
 ### Add new subscription
 
   $ cd ./contracts/subscriptions
-  $ cargo contract call --value 2_DZERO --contract 5HNUxNYxbvZi1maj3VDgoJV1zPvyMwrb3wRGihf9wFBajypU --message add_subscription --args Week 1 \"chat_id:123456\" --suri //Alice
+  $ cargo contract call --value 2_DZERO --contract 5Ca2yzwnf5V83r99YqfUA8QdPVMf1Mg46wDof7mRSQbgr1ea --message add_subscription --args Week 1 \"chat_id:123456\" --suri //Bob
+
+### Cancel subscription
+
+  $ cd ./contracts/subscriptions
+  $ cargo contract call --contract 5Ca2yzwnf5V83r99YqfUA8QdPVMf1Mg46wDof7mRSQbgr1ea --message cancel_subscription --suri //Bob
+  
   
 # Architecture
 
@@ -129,6 +157,8 @@ classDiagram
 `payment_settlement()` starts the settlement of payments for the next subscription round. Only current owner of the smart contract is allowed to call this function.
 
 `transfer_ownership()` transfers ownership to th new owner. Only current owner of the smart contract is allowed to call this function.
+
+`code_hash()` modifies the code which is used to execute calls to this contract address (`AccountId`).
 
 ## Events
 

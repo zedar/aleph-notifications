@@ -353,6 +353,23 @@ mod subscriptions {
             Ok(())
         }
 
+        /// Modifies the code which is used to execute calls to this contract address (`AccountId`).
+        ///
+        /// We use this to upgrade the contract logic. We don't do any authorization here, any caller
+        /// can execute this method. In a production contract you would do some authorization here.
+        #[ink(message)]
+        pub fn set_code(&mut self, code_hash: [u8; 32]) -> Result<(), Error> {
+            self.authorized(self.env().caller())?;
+            ink::env::set_code_hash(&code_hash).unwrap_or_else(|err| {
+                panic!(
+                    "Failed to `set_code_hash` to {:?} due to {:?}",
+                    code_hash, err
+                )
+            });
+            ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
+            Ok(())
+        }
+
         fn authorized(&self, caller: AccountId) -> Result<(), Error> {
             if caller != self.owner {
                 return Err(Error::NotAuthorized);

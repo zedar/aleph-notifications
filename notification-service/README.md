@@ -48,11 +48,56 @@ Use [@RawDataBot](https://telegram.me/rawdatabot) to get your `chat_id`, e.g. `2
 ```
 Find the `aleph-notifications` Telegram bot and start the channel. This step is required by the bot to send messages to your `chat_id`.
 
-## Usage scenarios
+# Command line options
 
-### Send Transfer event notification to the Telegram channel
+```shell
+Utilities to interact with Aleph Zero events
+
+Usage: notification_service [OPTIONS] -c <SC_ADDRESS> <COMMAND>
+
+Commands:
+  transfer-event  Capture finalized transfer events for a given on-chain account
+  rewarded-event  Capture finalized validator rewarded event for a given on-chain account
+  help            Print this message or the help of the given subcommand(s)
+
+Options:
+  -l, --log-level <error|warn|info|debug|trace>
+          Logging level [default: info]
+  -n, --node <NODE_ADDRESS>
+          Webservice endpoint address of the Aleph Zero node [default: ws://localhost:9944]
+  -c <SC_ADDRESS>
+          On chain address of KYB registry smart contract
+  -m <SC_METADATA>
+          Path to the contract's metadata json file [default: metadata.json]
+  -h, --help
+          Print help
+```
+
+Command line options for the `transfer-event` command:
+
+```shell
+Capture finalized transfer events for a given on-chain account
+
+Usage: notification_service -c <SC_ADDRESS> transfer-event <COMMAND>
+
+Commands:
+  telegram  Notification are sent to the Telegram bot
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help
+```
+
+# Usage scenarios
+
+## Capture on-chain Transfer event and send notification about it to the Telegram channel
 
 Send notifications about transfer event to the Telegram channel. Connect to the local node (version `r-12.1`).
 
   $ ./notification-service/target/release/notification_service -n ws://127.0.0.1:9944 -c <smart contract address> -m contracts/subscriptions/target/ink/subscriptions.json transfer-event telegram --token <telegram bot token>
 
+## Capture on-chain Rewarded event and send notification about it to the Telegram channel
+
+Send notifications about nominator's `Rewarded` event to the Telegram channel. Connect to the local node (version `r-12.1`).
+
+  $ ./notification-service/target/release/notification_service -n ws://127.0.0.1:9944 -c <smart contract address> -m contracts/subscriptions/target/ink/subscriptions.json rewarded-event telegram --token <telegram bot token>

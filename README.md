@@ -50,7 +50,27 @@ A cancellation event is published on-chain. The notificatin service listens for 
 flowchart LR
     subgraph aleph zero
     A[On-chain account] --Cancel subscription--> SC[[Smart contract]]
-    SC --Publish--> CSUB(Cancel subscrption Event)
+    SC --Publish--> CSUB(CancelSubscrption Event)
+    CEVT[On-chain event]
+    end
+    subgraph client
+    NS[Notification Service] --Watch for--oCSUB
+    NS --Deactivate-->NS
+    NS --Stop watching--xCEVT
+    end
+```
+
+Payment settlement is made periodically on the Subscriptions smart contract by an authorized user (typically smart contract owner). 
+For each active subscription, if a sufficient number of tokens are reserved, a periodic payment is made (tokens for one payment interval are transferred from the smart contract to the contract owner). 
+If the are no more reserved tokens for the next payment internal, the subscription is cancelled and becomes part of the `CancelledSubscriptions` event.
+The notification service automatically removes canceled subscriptions and stops sending notifications for them.
+
+```mermaid
+flowchart LR
+    subgraph aleph zero
+    A[On-chain account] --Payment settlement--> SC[[Smart contract]]
+    SC --Transfer tokens-->B[Smart contract owner account]
+    SC --Publish--> CSUB(CancelSubscriptions Event)
     CEVT[On-chain event]
     end
     subgraph client
