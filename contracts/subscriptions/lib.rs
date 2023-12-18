@@ -86,6 +86,8 @@ mod subscriptions {
         InvalidIntervalsToPay(u32),
         /// Costs of subscription too high. Required value passed as an error parameter
         SubscriptionCostTooHigh(Balance),
+        /// Returned when channel handle not provided
+        MissingChannelHandle,
         /// Returned when subscription does not exists for a given account
         NotRegisterred(AccountId),
         /// Returned when new owner is the same as the old one
@@ -163,14 +165,15 @@ mod subscriptions {
             external_channel_handle: String,
         ) -> Result<(), Error> {
             let caller = self.env().caller();
+            // if caller is already subscribed
             if self.subscriptions.get(caller).is_some() {
                 return Err(Error::AlreadyRegisterred(caller));
             }
 
-            if intervals_to_pay == 0 {
-                return Err(Error::InvalidIntervalsToPay(intervals_to_pay));
-            }
+            self.validate_intervals_to_pay(intervals_to_pay)?;
+            self.validate_channel_handle(&external_channel_handle)?;
 
+            // create new subscription record
             let curr_block = self.env().block_number();
             let price_per_interval = self.price_per_interval(&payment_interval);
             let subscription = Subscription {
@@ -183,7 +186,7 @@ mod subscriptions {
                 external_channel_handle: external_channel_handle.clone(),
             };
 
-            // Check hom much tokens have been transferred as part of the transaction
+            // Check how many tokens have been transferred as part of the transaction and if are enough to cover current and future payments
             let transferred_value = self.env().transferred_value();
             if transferred_value < price_per_interval * intervals_to_pay as u128 {
                 return Err(Error::SubscriptionCostTooHigh(
@@ -370,6 +373,7 @@ mod subscriptions {
             Ok(())
         }
 
+        /// Checks if caller is this smart contract owner
         fn authorized(&self, caller: AccountId) -> Result<(), Error> {
             if caller != self.owner {
                 return Err(Error::NotAuthorized);
@@ -377,6 +381,23 @@ mod subscriptions {
             Ok(())
         }
 
+        /// Validates channel handle
+        fn validate_channel_handle(&self, channel_handle: &str) -> Result<(), Error> {
+            if channel_handle.is_empty() {
+                return Err(Error::MissingChannelHandle);
+            }
+            Ok(())
+        }
+
+        /// Validates intervals to pay
+        fn validate_intervals_to_pay(&self, intervals_to_pay: u32) -> Result<(), Error> {
+            if intervals_to_pay == 0 {
+                return Err(Error::InvalidIntervalsToPay(intervals_to_pay));
+            }
+            Ok(())
+        }
+
+        /// Calculates price of interval
         fn price_per_interval(&self, payment_interval: &PaymentInterval) -> Balance {
             self.price_per_block
                 * match payment_interval {
@@ -385,6 +406,7 @@ mod subscriptions {
                 }
         }
 
+        /// Calculates number of intervals from the last paid block
         fn to_pay_intervals(
             &self,
             payment_interval: PaymentInterval,
@@ -503,6 +525,7 @@ mod subscriptions {
                 .contains(&accounts.charlie));
 
             // Charlie cancels subscription
+            ink::env::test::transfer_in::<ink::env::DefaultEnvironment>(0);
             subscriptions.cancel_subscription().unwrap();
             assert!(!subscriptions.subscriptions.contains(accounts.charlie));
             assert!(!subscriptions
