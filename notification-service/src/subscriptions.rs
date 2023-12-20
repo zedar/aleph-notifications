@@ -285,9 +285,13 @@ impl Subscriptions {
     }
 
     fn decode_account_ids(&self, v: Option<&contract_transcode::Value>) -> Result<Vec<AccountId>> {
-        match v {
+        let res: Result<Vec<Subscription>> = match v {
             Some(v) => ConvertibleValue(v.clone()).try_into(),
             None => bail!("missing attribute of type Seq<Value>"),
+        };
+        match res {
+            Err(err) => Err(err),
+            Ok(v) => Ok(v.into_iter().map(|e| e.for_account).collect::<Vec<_>>()),
         }
     }
 }

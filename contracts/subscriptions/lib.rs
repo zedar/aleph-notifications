@@ -11,7 +11,7 @@ mod subscriptions {
         storage::Mapping,
     };
 
-    pub const BLOCKS_PER_WEEK: u32 = 3600 * 24 * 7;
+    pub const BLOCKS_PER_WEEK: u32 = 10 * 1; // 3600 * 24 * 7;
     pub const BLOCKS_PER_MONTH: u32 = 3600 * 24 * 7 * 30;
 
     /// Defines subscription payment interval
@@ -127,7 +127,7 @@ mod subscriptions {
     /// Event emitted on payment settelment, when there is at least one subscription to be cancelled
     #[ink(event)]
     pub struct CancelledSubscriptions {
-        for_accounts: Vec<AccountId>,
+        for_accounts: Vec<ActiveSubscriptionAttr>,
     }
 
     impl Subscriptions {
@@ -286,7 +286,7 @@ mod subscriptions {
         pub fn payment_settlement(&mut self) -> Result<(), Error> {
             self.authorized(self.env().caller())?;
 
-            let mut subs_to_cancel: Vec<AccountId> = vec![];
+            let mut subs_to_cancel: Vec<ActiveSubscriptionAttr> = vec![];
 
             let curr_block = self.env().block_number();
 
@@ -295,37 +295,45 @@ mod subscriptions {
                     .subscriptions
                     .get(acct_id)
                     .ok_or(Error::InconsistentSubscriptionData(*acct_id))?;
-                // calculate number of to pay intervals
+                // calculate number of intervals to pay
                 let mut to_pay_intervals =
                     self.to_pay_intervals(s.payment_interval, curr_block, s.last_payment_at);
                 // check if there is something to pay
                 if to_pay_intervals == 0 {
                     continue;
                 }
-                // if founds are not sufficient to pay all intervals to pay, transfer the remaining funds
+                // if founds are not sufficient to pay all intervals to pay, transfer the remaining funds and cancel subscription
+                let mut cancel_subscription = false;
                 if s.declared_payment_intervals - s.paid_intervals < to_pay_intervals {
                     to_pay_intervals = s.declared_payment_intervals - s.paid_intervals;
+                    cancel_subscription = true;
                 }
 
+                // calculate tokens to pay for past intervals eventually current interval
                 let to_pay = s.price_per_interval * to_pay_intervals as u128;
-
-                self.transfer_to_owner(to_pay);
+                if to_pay > 0 {
+                    self.transfer_to_owner(to_pay);
+                }
 
                 s.paid_intervals += to_pay_intervals;
                 s.last_payment_at = curr_block;
 
-                if s.declared_payment_intervals == s.paid_intervals {
+                if cancel_subscription {
                     // add subscription to the list of to be cancelled subsccriptions
-                    subs_to_cancel.push(*acct_id);
+                    subs_to_cancel.push(ActiveSubscriptionAttr {
+                        for_account: *acct_id,
+                        external_channel_handle: s.external_channel_handle.into_bytes(),
+                    });
                 } else {
                     self.subscriptions.insert(acct_id, &s);
                 }
             }
 
             // cancel subscriptions
-            for acct_id in &*subs_to_cancel {
-                self.subscriptions.remove(acct_id);
-                self.active_subscriptions.retain(|id| acct_id != id);
+            for sub_to_cancel in &*subs_to_cancel {
+                self.subscriptions.remove(sub_to_cancel.for_account);
+                self.active_subscriptions
+                    .retain(|id| &sub_to_cancel.for_account != id);
             }
             if !subs_to_cancel.is_empty() {
                 // emit an event with a list of cancelled subscriptions
@@ -649,7 +657,31 @@ mod subscriptions {
                 1
             );
 
-            // advancce one week of blocks
+            // advance one week of blocks, both bob and charlie should still have active subscriptions
+            for _ in 0..BLOCKS_PER_WEEK {
+                ink::env::test::advance_block::<ink::env::DefaultEnvironment>();
+            }
+            assert!(subscriptions.payment_settlement().is_ok());
+            assert!(subscriptions.subscriptions.get(accounts.bob).is_some());
+            assert_eq!(
+                subscriptions
+                    .subscriptions
+                    .get(accounts.bob)
+                    .unwrap()
+                    .paid_intervals,
+                2
+            );
+            assert!(subscriptions.subscriptions.get(accounts.charlie).is_some());
+            assert_eq!(
+                subscriptions
+                    .subscriptions
+                    .get(accounts.charlie)
+                    .unwrap()
+                    .paid_intervals,
+                2
+            );
+
+            // advance one more week of blocks, bob's subscription should be cancelled.  Charlie should still have active subscription
             for _ in 0..BLOCKS_PER_WEEK {
                 ink::env::test::advance_block::<ink::env::DefaultEnvironment>();
             }
@@ -662,14 +694,20 @@ mod subscriptions {
                     .get(accounts.charlie)
                     .unwrap()
                     .paid_intervals,
-                2
+                3
             );
 
             // test emitted events
             let events = recorded_events().collect::<Vec<_>>();
             assert_new_subscription(&events[0], accounts.bob, "1111".to_string());
             assert_new_subscription(&events[1], accounts.charlie, "2222".to_string());
-            assert_cancelled_subscriptions(&events[2], vec![accounts.bob]);
+            assert_cancelled_subscriptions(
+                &events[2],
+                vec![ActiveSubscriptionAttr {
+                    for_account: accounts.bob,
+                    external_channel_handle: "1111".as_bytes().to_vec(),
+                }],
+            );
         }
 
         #[ink::test]
@@ -720,7 +758,7 @@ mod subscriptions {
 
         fn assert_cancelled_subscriptions(
             event: &EmittedEvent,
-            expected_for_accounts: Vec<AccountId>,
+            expected_for_accounts: Vec<ActiveSubscriptionAttr>,
         ) {
             let decoded_event = <Event as scale::Decode>::decode(&mut &event.data[..])
                 .expect("invalid event buffer");
