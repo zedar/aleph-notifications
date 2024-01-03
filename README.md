@@ -10,7 +10,9 @@ The notification service subscribes to events from:
 The notification service sends notifications about on-chain events to external channels, e.g. Telegram.
 The `Subscriptions` smart contract allows to register a new subscription, cancel a subscription, and payment settlement for payment intervals.
 
-Note: this project is being developed as part of the hackaton [Aleph Zero Hackaton](https://techfiesta.dev/techfiestas/9/aleph-zero-hackathon).
+Note #1: this project is being developed as part of the hackathon [Aleph Zero Hackathon](https://techfiesta.dev/techfiestas/9/aleph-zero-hackathon).
+Note #2: this project won the Techfiesta hackathon [The winners of Aleph Zero hackathon](https://twitter.com/techFiesta_hack/status/1740655723506479426)
+![Techfiest Aleph Zero hackathon winners](../images/hackathon_announcement.png)
 
 # Structure
 
