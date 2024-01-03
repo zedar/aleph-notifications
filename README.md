@@ -14,7 +14,7 @@ Note #1: this project is being developed as part of the hackathon [Aleph Zero Ha
 
 Note #2: this project won the Techfiesta hackathon [The winners of Aleph Zero hackathon](https://twitter.com/techFiesta_hack/status/1740655723506479426)
 
-![Techfiest Aleph Zero hackathon winners](./images/hackathon_announcement.png)
+![Techfiest Aleph Zero hackathon winners](./images/hackathon_announcement.png | width=120)
 
 # Structure
 
